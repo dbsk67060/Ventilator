@@ -1,0 +1,461 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Service Health · Dashboard</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <style>
+      :root {
+        --bg: #0f172a;
+        --bg-elevated: #111827;
+        --border-subtle: rgba(148, 163, 184, 0.25);
+        --text: #e5e7eb;
+        --text-muted: #9ca3af;
+        --accent: #38bdf8;
+        --accent-soft: rgba(56, 189, 248, 0.15);
+        --danger: #f97373;
+        --warning: #facc15;
+        --success: #4ade80;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        padding: 0;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: radial-gradient(circle at top, #1e293b 0, #020617 55%);
+        color: var(--text);
+      }
+
+      .page {
+        max-width: 1100px;
+        margin: 0 auto;
+        padding: 1.5rem 1.25rem 2.5rem;
+      }
+
+      .top-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        margin-bottom: 1.0rem;
+      }
+
+      .title-group h1 {
+        margin: 0;
+        font-size: 1.25rem;
+        letter-spacing: 0.03em;
+        text-transform: uppercase;
+        color: var(--text-muted);
+      }
+
+      .title-group .subtitle {
+        font-size: 0.9rem;
+        color: var(--text-muted);
+        margin-top: 0.15rem;
+      }
+
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        padding: 0.35rem 0.7rem;
+        border-radius: 999px;
+        border: 1px solid var(--border-subtle);
+        background: rgba(15, 23, 42, 0.85);
+        font-size: 0.8rem;
+        color: var(--text-muted);
+      }
+
+      .pill-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--accent);
+      }
+
+      .btn {
+        border-radius: 999px;
+        padding: 0.45rem 0.95rem;
+        border: 1px solid var(--border-subtle);
+        background: rgba(15, 23, 42, 0.9);
+        color: var(--text);
+        font-size: 0.85rem;
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        cursor: pointer;
+        transition: background 0.15s ease, transform 0.1s ease, box-shadow 0.1s ease;
+      }
+
+      .btn:hover {
+        background: rgba(15, 23, 42, 1);
+        transform: translateY(-0.5px);
+        box-shadow: 0 4px 18px rgba(15, 23, 42, 0.4);
+      }
+
+      .btn-primary {
+        background: linear-gradient(135deg, #2563eb, #06b6d4);
+        border-color: transparent;
+      }
+
+      .btn-primary:hover {
+        filter: brightness(1.05);
+      }
+
+      .layout {
+        display: grid;
+        grid-template-columns: 2fr 1fr;
+        gap: 1rem;
+      }
+
+      @media (max-width: 800px) {
+        .layout {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      .card {
+        border-radius: 1rem;
+        border: 1px solid var(--border-subtle);
+        background: radial-gradient(circle at top left, rgba(56, 189, 248, 0.12), rgba(15, 23, 42, 0.96));
+        padding: 1rem;
+        box-shadow: 0 20px 40px rgba(15, 23, 42, 0.7);
+      }
+
+      .card-secondary {
+        background: rgba(15, 23, 42, 0.95);
+      }
+
+      .card-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 0.75rem;
+      }
+
+      .card-header h2 {
+        margin: 0;
+        font-size: 1rem;
+        font-weight: 600;
+      }
+
+      .card-header span {
+        font-size: 0.8rem;
+        color: var(--text-muted);
+      }
+
+      .table-wrapper {
+        width: 100%;
+        overflow-x: auto;
+      }
+
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        font-size: 0.82rem;
+      }
+
+      th, td {
+        padding: 0.55rem 0.5rem;
+        text-align: left;
+        border-bottom: 1px solid rgba(148, 163, 184, 0.15);
+        white-space: nowrap;
+      }
+
+      th {
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--text-muted);
+      }
+
+      tbody tr:hover {
+        background: rgba(15, 23, 42, 0.75);
+      }
+
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        border-radius: 999px;
+        padding: 0.15rem 0.6rem;
+        font-size: 0.75rem;
+        font-weight: 500;
+      }
+
+      .badge-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+      }
+
+      .badge-healthy {
+        background: rgba(22, 163, 74, 0.18);
+        color: var(--success);
+      }
+
+      .badge-healthy .badge-dot {
+        background: var(--success);
+      }
+
+      .badge-unhealthy {
+        background: rgba(248, 113, 113, 0.18);
+        color: var(--danger);
+      }
+
+      .badge-unhealthy .badge-dot {
+        background: var(--danger);
+      }
+
+      .badge-starting {
+        background: rgba(250, 204, 21, 0.18);
+        color: var(--warning);
+      }
+
+      .badge-starting .badge-dot {
+        background: var(--warning);
+      }
+
+      .badge-none {
+        background: rgba(148, 163, 184, 0.14);
+        color: var(--text-muted);
+      }
+
+      .status-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3rem;
+        padding: 0.12rem 0.5rem;
+        border-radius: 999px;
+        border: 1px solid rgba(148, 163, 184, 0.4);
+        font-size: 0.75rem;
+        color: var(--text-muted);
+      }
+
+      .footer-note {
+        margin-top: 0.75rem;
+        font-size: 0.75rem;
+        color: var(--text-muted);
+      }
+
+      .footer-note span {
+        color: var(--accent);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <div class="top-bar">
+        <div class="title-group">
+          <h1>Service Health</h1>
+          <div class="subtitle">
+            Logged in as {{ user }} · auto-refresh every 10s
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 0.5rem; align-items: center;">
+          <div class="pill">
+            <div class="pill-dot"></div>
+            Live from Docker
+          </div>
+          <a href="{{ url_for('dashboard') }}" class="btn">
+            ⬅ Back to main dashboard
+          </a>
+        </div>
+      </div>
+
+      <!-- Global warning banner -->
+      <div id="global-alert" style="display:none; margin-bottom: 0.75rem; padding: 0.6rem 0.9rem; border-radius: 0.75rem; background: rgba(248,113,113,0.12); border: 1px solid rgba(248,113,113,0.4); font-size: 0.85rem;">
+        <strong>Some services are unhealthy.</strong>
+        <span id="global-alert-text" style="margin-left: 0.25rem; opacity: 0.9;"></span>
+      </div>
+
+      <div class="layout">
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <h2>Containers</h2>
+              <span>Health, status, restart counts & details</span>
+            </div>
+            <button class="btn btn-primary" type="button" onclick="loadHealth()">
+              ⟳ Refresh now
+            </button>
+          </div>
+
+          <div class="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>Container</th>
+                  <th>Docker Status</th>
+                  <th>Health</th>
+                  <th>Restarts</th>
+                  <th>Details</th>
+                </tr>
+              </thead>
+              <tbody id="health-body">
+                <tr><td colspan="5">Loading...</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="footer-note">
+            Docker health is driven by the <code>healthcheck</code> definitions in your
+            <span>docker-compose.yml</span>.
+          </div>
+        </div>
+
+        <div class="card card-secondary">
+          <div class="card-header">
+            <div>
+              <h2>Legend</h2>
+              <span>What the statuses mean</span>
+            </div>
+          </div>
+
+          <ul style="list-style: none; padding-left: 0; margin: 0;">
+            <li style="margin-bottom: 0.4rem;">
+              <span class="badge badge-healthy"><span class="badge-dot"></span>Healthy</span>
+              – healthcheck succeeding within the configured thresholds.
+            </li>
+            <li style="margin-bottom: 0.4rem;">
+              <span class="badge badge-starting"><span class="badge-dot"></span>Starting</span>
+              – container is in grace period or initial checks.
+            </li>
+            <li style="margin-bottom: 0.4rem;">
+              <span class="badge badge-unhealthy"><span class="badge-dot"></span>Unhealthy</span>
+              – recent healthchecks failed; investigate logs or dependencies.
+            </li>
+            <li style="margin-bottom: 0.4rem;">
+              <span class="badge badge-none"><span class="badge-dot"></span>No healthcheck</span>
+              – container has no <code>healthcheck</code> in compose.
+            </li>
+          </ul>
+
+          <div class="footer-note">
+            Tip: add <code>healthcheck:</code> to more services to see them here with
+            proper health status.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      async function loadHealth() {
+        try {
+          const res = await fetch("{{ url_for('health_data') }}");
+          const tbody = document.getElementById("health-body");
+
+          if (!res.ok) {
+            tbody.innerHTML = "<tr><td colspan='5'>Failed to load health data.</td></tr>";
+            return;
+          }
+
+          const data = await res.json();
+          tbody.innerHTML = "";
+
+          if (!Array.isArray(data) || data.length === 0) {
+            tbody.innerHTML = "<tr><td colspan='5'>No containers found.</td></tr>";
+            return;
+          }
+
+          // Global alert if anything is unhealthy or not running
+          const alertBox = document.getElementById("global-alert");
+          const alertText = document.getElementById("global-alert-text");
+
+          const badOnes = data.filter(item =>
+            item.health === "unhealthy" ||
+            item.status !== "running"
+          );
+
+          if (badOnes.length > 0) {
+            alertBox.style.display = "block";
+            const names = badOnes
+              .map(i => i.name + " (" + (i.health || i.status) + ")")
+              .join(", ");
+            alertText.textContent = "Affected: " + names;
+          } else {
+            alertBox.style.display = "none";
+            alertText.textContent = "";
+          }
+
+          data.forEach(item => {
+            const tr = document.createElement("tr");
+
+            const tdName = document.createElement("td");
+            tdName.textContent = item.name;
+
+            const tdStatus = document.createElement("td");
+            const statusSpan = document.createElement("span");
+            statusSpan.className = "status-pill";
+            statusSpan.textContent = item.status || "unknown";
+            tdStatus.appendChild(statusSpan);
+
+            const tdHealth = document.createElement("td");
+            let badgeClass = "badge badge-none";
+            let label = "no healthcheck";
+
+            if (item.health === "healthy") {
+              badgeClass = "badge badge-healthy";
+              label = "healthy";
+            } else if (item.health === "unhealthy") {
+              badgeClass = "badge badge-unhealthy";
+              label = "unhealthy";
+            } else if (item.health === "starting") {
+              badgeClass = "badge badge-starting";
+              label = "starting";
+            }
+
+            const badge = document.createElement("span");
+            badge.className = badgeClass;
+            const dot = document.createElement("span");
+            dot.className = "badge-dot";
+            const text = document.createElement("span");
+            text.textContent = label;
+            badge.appendChild(dot);
+            badge.appendChild(text);
+            tdHealth.appendChild(badge);
+
+            const tdRestart = document.createElement("td");
+            tdRestart.textContent = (item.restart_count != null) ? item.restart_count : "-";
+
+            // Details / last healthcheck output
+            const tdDetails = document.createElement("td");
+            let msg = item.health_log || "";
+            if (msg) {
+              msg = msg.trim().replace(/\s+/g, " "); // compress whitespace
+              if (msg.length > 120) {
+                msg = msg.slice(0, 120) + "…";
+              }
+              tdDetails.textContent = msg;
+            } else {
+              tdDetails.textContent = "-";
+            }
+
+            tr.appendChild(tdName);
+            tr.appendChild(tdStatus);
+            tr.appendChild(tdHealth);
+            tr.appendChild(tdRestart);
+            tr.appendChild(tdDetails);
+
+            tbody.appendChild(tr);
+          });
+
+        } catch (err) {
+          console.error("Error loading health:", err);
+          const tbody = document.getElementById("health-body");
+          tbody.innerHTML = "<tr><td colspan='5'>Error loading health data.</td></tr>";
+        }
+      }
+
+      loadHealth();
+      setInterval(loadHealth, 10000); // every 10 seconds
+    </script>
+  </body>
+</html>
