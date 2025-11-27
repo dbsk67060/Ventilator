@@ -1,0 +1,11 @@
+{
+  "devices": [
+    {
+      "deviceName": "Device 1",
+      "metrics": [
+        {"name": "Current Grid Voltage", "dataType": "Float", "value": 3.3, "autoChange": true},
+        {"name": "Outputs/LEDs/Green", "dataType": "Boolean", "value": true, "autoChange": true}
+      ]
+    }
+  ]
+}
