@@ -1,3 +1,0 @@
-paho-mqtt
-protobuf
-psycopg2-binary
