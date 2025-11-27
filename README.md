@@ -17,6 +17,11 @@ Alle mapper indeholder kun konfiguration og kode. Ingen runtime-data følger med
 Docker
 Docker Compose v2
 
+```
+sudo apt install docker
+sudo apt install docker-compose
+```
+
 ## Installation
 
 Klon projektet:
@@ -30,7 +35,7 @@ cd Ventilator-get
 Start hele systemet:
 
 ```
-docker compose up -d
+docker-compose up -d
 ```
 
 Systemet starter følgende services:
