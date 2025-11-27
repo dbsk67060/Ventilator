@@ -35,7 +35,7 @@ cd Ventilator-get
 Start hele systemet:
 
 ```
-docker-compose up -d
+docker compose up -d
 ```
 
 Systemet starter følgende services:
