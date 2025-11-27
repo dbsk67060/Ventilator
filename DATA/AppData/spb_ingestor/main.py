@@ -58,27 +58,26 @@ def init_pg_connection():
 # ---------------------------------------------------------
 def parse_topic(topic: str) -> Dict[str, str]:
     """
-    spBv1.0/<group>/<type>/<eon>/<device>
+    spBv1.0/<group>/<type>/<device>
     """
     p = topic.split("/")
     return {
         "type":   p[2] if len(p) > 2 else "",
-        "eon":    p[3] if len(p) > 3 else "",
         "device": p[4] if len(p) > 4 else "",
     }
 
 # ---------------------------------------------------------
 # Insert metrics into PostgreSQL with timestamp
 # ---------------------------------------------------------
-def ilp_send(eon: str, device: str, fields: Dict[str, Any]) -> None:
+def ilp_send(device: str, fields: Dict[str, Any]) -> None:
     global _pg_conn
     if _pg_conn is None:
         init_pg_connection()
 
-    columns = ["eon", "device"]
-    values = [eon, device]
+    columns = ["device"]
+    values = [device]
 
-    for k in ("temp", "hum", "tryk", "rpm"):
+    for k in ("temp", "tryk", "rpm"):
         if fields.get(k) is not None:
             columns.append(k)
             values.append(fields[k])
@@ -94,7 +93,7 @@ def ilp_send(eon: str, device: str, fields: Dict[str, Any]) -> None:
     with _pg_conn.cursor() as cur:
         cur.execute(sql, values)
 
-    logging.info("WROTE PG: eon=%s device=%s %s", eon, device, fields)
+    logging.info("WROTE PG: device=%s %s", device, fields)
 
 # ---------------------------------------------------------
 # Decode payload
@@ -108,7 +107,7 @@ def decode_payload(b: bytes) -> Dict[str, Any]:
         for m in payload.metrics:
             if not m.name:
                 continue
-            if m.name in ("temp", "hum", "tryk"):
+            if m.name in ("temp", "tryk"):
                 if m.HasField("float_value"):
                     out[m.name] = float(m.float_value)
                 elif m.HasField("double_value"):
@@ -138,7 +137,7 @@ def decode_payload(b: bytes) -> Dict[str, Any]:
             k, v = part.split("=", 1)
             k = k.strip()
             v = v.strip()
-            if k in ("temp", "hum", "tryk"):
+            if k in ("temp", "tryk"):
                 out[k] = float(v)
             elif k == "rpm":
                 out["rpm"] = int(v)
@@ -166,9 +165,8 @@ def on_message(client, userdata, msg):
     try:
         metrics = decode_payload(msg.payload)
         if metrics:
-            eon = meta["eon"] or "eon"
             dev = meta["device"] or "device"
-            ilp_send(eon, dev, metrics)
+            ilp_send(dev, metrics)
         else:
             logging.debug("No metrics decoded for topic=%s", msg.topic)
     except Exception as e:
@@ -217,4 +215,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
