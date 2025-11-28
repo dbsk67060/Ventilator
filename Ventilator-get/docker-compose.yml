@@ -149,19 +149,7 @@ services:
       timeout: 3s
       retries: 3
       start_period: 20s
-
-  pyscripts:         
-    image: python:3.11-slim
-    container_name: pyscripts
-    restart: unless-stopped
-    working_dir: /scripts
-    volumes:
-      - /DATA/AppData/pyscripts:/scripts
-    command: tail -f /dev/null
-    environment:
-      - TZ=Europe/Copenhagen
-  # No healthcheck here – this is just a utility container with no service
-
+      
   # -----------------------------
   # LOGGING + MONITORING STACK
   # -----------------------------
