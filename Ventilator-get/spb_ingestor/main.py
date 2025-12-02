@@ -7,23 +7,21 @@ from datetime import datetime
 
 import paho.mqtt.client as mqtt
 import psycopg2
+import json
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
 # ---------------------------------------------------------
-# Try to import Sparkplug B protobuf
+# Sparkplug B protobuf
 # ---------------------------------------------------------
 try:
-    import sparkplug_b_pb2 as spb  # normally generated from sparkplug_b.proto
+    import sparkplug_b_pb2 as spb
     SPB_AVAILABLE = True
     logging.info("sparkplug_b_pb2 imported successfully, SPB decoding enabled.")
 except ImportError:
-    spb = None  # type: ignore
+    spb = None
     SPB_AVAILABLE = False
-    logging.warning(
-        "sparkplug_b_pb2 not found, SPB decoding disabled. "
-        "Will use fallback text decoder for payloads."
-    )
+    logging.warning("sparkplug_b_pb2 not found, SPB decoding disabled. Using JSON/fallback.")
 
 # ---------------------------------------------------------
 # Environment variables
@@ -32,7 +30,7 @@ MQTT_HOST = os.getenv("MQTT_HOST", "mqtt")
 MQTT_PORT = int(os.getenv("MQTT_PORT", "1883"))
 SPB_GROUP = os.getenv("SPB_GROUP", "plantA")
 QDB_ILP_HOST = os.getenv("QDB_ILP_HOST", "questdb")
-QDB_ILP_PORT = int(os.getenv("QDB_ILP_PORT", "8812"))  # PostgreSQL wire port
+QDB_ILP_PORT = int(os.getenv("QDB_ILP_PORT", "8812"))
 TABLE = os.getenv("QDB_TABLE", "sensor_data")
 INGESTOR_HEALTH_PORT = int(os.getenv("INGESTOR_HEALTH_PORT", "8002"))
 
@@ -57,9 +55,6 @@ def init_pg_connection():
 # Topic parsing
 # ---------------------------------------------------------
 def parse_topic(topic: str) -> Dict[str, str]:
-    """
-    spBv1.0/<group>/<type>/<device>
-    """
     p = topic.split("/")
     return {
         "type":   p[2] if len(p) > 2 else "",
@@ -67,7 +62,7 @@ def parse_topic(topic: str) -> Dict[str, str]:
     }
 
 # ---------------------------------------------------------
-# Insert metrics into PostgreSQL with timestamp
+# Insert into QuestDB
 # ---------------------------------------------------------
 def ilp_send(device: str, fields: Dict[str, Any]) -> None:
     global _pg_conn
@@ -82,13 +77,13 @@ def ilp_send(device: str, fields: Dict[str, Any]) -> None:
             columns.append(k)
             values.append(fields[k])
 
-    # Add timestamp as the last column
     columns.append("timestamp")
     values.append(datetime.utcnow())
 
     col_str = ",".join(columns)
-    val_placeholders = ",".join(["%s"] * len(values))
-    sql = f"INSERT INTO {TABLE} ({col_str}) VALUES ({val_placeholders})"
+    placeholders = ",".join(["%s"] * len(values))
+
+    sql = f"INSERT INTO {TABLE} ({col_str}) VALUES ({placeholders})"
 
     with _pg_conn.cursor() as cur:
         cur.execute(sql, values)
@@ -96,43 +91,64 @@ def ilp_send(device: str, fields: Dict[str, Any]) -> None:
     logging.info("WROTE PG: device=%s %s", device, fields)
 
 # ---------------------------------------------------------
-# Decode payload
+# Decode payload (Sparkplug → JSON → fallback)
 # ---------------------------------------------------------
 def decode_payload(b: bytes) -> Dict[str, Any]:
+
+    # -----------------------------
+    # 1. Sparkplug B protobuf
+    # -----------------------------
     if SPB_AVAILABLE:
-        payload = spb.Payload()
-        payload.ParseFromString(b)
-        out: Dict[str, Any] = {}
+        try:
+            payload = spb.Payload()
+            payload.ParseFromString(b)
+            out: Dict[str, Any] = {}
 
-        for m in payload.metrics:
-            if not m.name:
-                continue
-            if m.name in ("temp", "tryk"):
-                if m.HasField("float_value"):
-                    out[m.name] = float(m.float_value)
-                elif m.HasField("double_value"):
-                    out[m.name] = float(m.double_value)
-                elif m.HasField("int_value"):
-                    out[m.name] = float(m.int_value)
-                elif m.HasField("long_value"):
-                    out[m.name] = float(m.long_value)
-            elif m.name == "rpm":
-                if m.HasField("int_value"):
-                    out["rpm"] = int(m.int_value)
-                elif m.HasField("long_value"):
-                    out["rpm"] = int(m.long_value)
-        return out
+            for m in payload.metrics:
+                if not m.name:
+                    continue
+                if m.name in ("temp", "tryk"):
+                    if m.HasField("float_value"):
+                        out[m.name] = float(m.float_value)
+                    elif m.HasField("double_value"):
+                        out[m.name] = float(m.double_value)
+                    elif m.HasField("int_value"):
+                        out[m.name] = float(m.int_value)
+                elif m.name == "rpm":
+                    if m.HasField("int_value"):
+                        out["rpm"] = int(m.int_value)
+                    elif m.HasField("long_value"):
+                        out["rpm"] = int(m.long_value)
 
-    # Fallback text parsing
+            if out:
+                return out
+
+        except Exception:
+            pass
+
+    # -----------------------------
+    # 2. JSON (from ESP32)
+    # -----------------------------
     text = b.decode("utf-8", errors="ignore").strip()
-    if not text:
-        return {}
 
+    try:
+        j = json.loads(text)
+        out = {}
+        if "temp" in j: out["temp"] = float(j["temp"])
+        if "tryk" in j: out["tryk"] = float(j["tryk"])
+        if "rpm"  in j: out["rpm"]  = int(j["rpm"])
+        if out:
+            return out
+    except Exception:
+        pass
+
+    # -----------------------------
+    # 3. Fallback text "temp=23,tryk=12,rpm=850"
+    # -----------------------------
     out: Dict[str, Any] = {}
     try:
         for part in text.split(","):
-            part = part.strip()
-            if not part or "=" not in part:
+            if "=" not in part:
                 continue
             k, v = part.split("=", 1)
             k = k.strip()
@@ -141,8 +157,8 @@ def decode_payload(b: bytes) -> Dict[str, Any]:
                 out[k] = float(v)
             elif k == "rpm":
                 out["rpm"] = int(v)
-    except Exception as e:
-        logging.warning("Fallback decode failed for payload '%s': %s", text, e)
+    except Exception:
+        logging.warning("fallback decode failed: %s", text)
 
     return out
 
@@ -168,11 +184,13 @@ def on_message(client, userdata, msg):
             dev = meta["device"] or "device"
             ilp_send(dev, metrics)
         else:
-            logging.debug("No metrics decoded for topic=%s", msg.topic)
+            logging.debug("No metrics decoded for %s", msg.topic)
     except Exception as e:
-        logging.warning("Decode/PG insert failed: %s (topic=%s)", e, msg.topic)
+        logging.warning("Decode/insert error: %s", e)
 
-# ----------------- SIMPLE HTTP HEALTH SERVER -----------------
+# ---------------------------------------------------------
+# Health server
+# ---------------------------------------------------------
 class HealthHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path == "/health":
@@ -189,7 +207,7 @@ class HealthHandler(BaseHTTPRequestHandler):
 
 def start_health_server():
     server = HTTPServer(("", INGESTOR_HEALTH_PORT), HealthHandler)
-    logging.info("Starting ingestor health server on port %d", INGESTOR_HEALTH_PORT)
+    logging.info("Starting ingestor health server on %d", INGESTOR_HEALTH_PORT)
     server.serve_forever()
 
 # ---------------------------------------------------------
@@ -198,14 +216,8 @@ def start_health_server():
 def main():
     threading.Thread(target=start_health_server, daemon=True).start()
 
-    logging.info(
-        "Starter ingestor -> QuestDB PostgreSQL %s:%d table=%s",
-        QDB_ILP_HOST, QDB_ILP_PORT, TABLE,
-    )
-    if not SPB_AVAILABLE:
-        logging.warning(
-            "sparkplug_b_pb2 missing – using fallback text-decoder for payloads."
-        )
+    logging.info("Starting ingestor → QuestDB %s:%d table=%s",
+                 QDB_ILP_HOST, QDB_ILP_PORT, TABLE)
 
     client = mqtt.Client(client_id="optilogic-spb-ingestor", clean_session=True)
     client.on_connect = on_connect
