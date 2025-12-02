@@ -16,7 +16,16 @@ docker_client = docker.DockerClient(base_url="unix://var/run/docker.sock")
 FASTAPI_URL = os.getenv("FASTAPI_URL", "http://fastapi:80")
 
 # Dummy user
-USER = {"username": "admin", "password": "password"}
+USERS = {
+    "admin": {
+        "password": "password",
+        "role": "admin"
+    },
+    "user": {
+        "password": "password",
+        "role": "user"   # almindelig bruger, ingen adgang til health
+    }
+}
 
 
 # -----------------------
@@ -27,11 +36,26 @@ def login():
     if request.method == "POST":
         username = request.form.get("username")
         password = request.form.get("password")
-        if username == USER["username"] and password == USER["password"]:
+
+        user = USERS.get(username)
+        if user and password == user["password"]:
             session["user"] = username
+            session["role"] = user["role"]   # 👈 gem rollen i session
             return redirect(url_for("dashboard"))
+
         return render_template("login.html", error="Invalid credentials")
+
     return render_template("login.html")
+#@app.route("/", methods=["GET", "POST"])
+#def login():
+#    if request.method == "POST":
+#        username = request.form.get("username")
+#        password = request.form.get("password")
+#        if username == USER["username"] and password == USER["password"]:
+#            session["user"] = username
+#            return redirect(url_for("dashboard"))
+#        return render_template("login.html", error="Invalid credentials")
+#    return render_template("login.html")
 
 #------------------------
 #   TEST - slet når der er testet faerdig
@@ -69,7 +93,12 @@ def dashboard():
     except Exception as e:
         data = []
         print(f"Fejl ved hentning af sensordata: {e}")
-
+    return render_template(
+        "dashboard.html",
+        data=data,
+        user=session["user"],
+        role=session.get("role")
+        )
     # Tilpas felterne her så de matcher din QuestDB-tabel
     labels = [datetime.fromisoformat(row.get("timestamp")).strftime("%d-%m-%Y %H:%M") for row in data]
     values = [row.get("temperature") for row in data]
